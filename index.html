@@ -72,6 +72,57 @@
             </div>
             <input type="range" id="ctrl-scale" min="0.1" max="1.8" step="0.01" value="1" />
           </label>
+
+          <div class="subheading">Motion effector</div>
+
+          <div class="field-inline" style="margin-bottom: 12px;">
+            <span>Enable motion</span>
+            <label class="switch">
+              <input type="checkbox" id="ctrl-motion-enabled" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+
+          <div id="motion-controls" hidden>
+            <div class="segmented" id="motion-shape">
+              <button class="segmented-btn active" data-shape="circular">Circular</button>
+              <button class="segmented-btn" data-shape="square">Square</button>
+              <button class="segmented-btn" data-shape="triangular">Triangular</button>
+              <button class="segmented-btn" data-shape="star">Star</button>
+            </div>
+
+            <label class="field">
+              <div class="field-label">
+                <span>Speed</span>
+                <span class="field-value" id="val-motion-speed">1.00</span>
+              </div>
+              <input type="range" id="ctrl-motion-speed" min="0.1" max="5" step="0.1" value="1" />
+            </label>
+
+            <label class="field">
+              <div class="field-label">
+                <span>Wave amplitude</span>
+                <span class="field-value" id="val-motion-amplitude">60%</span>
+              </div>
+              <input type="range" id="ctrl-motion-amplitude" min="0" max="150" step="5" value="60" />
+            </label>
+
+            <div class="field-inline" style="margin-bottom: 10px;">
+              <span>Randomize ball scale</span>
+              <label class="switch">
+                <input type="checkbox" id="ctrl-motion-randomness" />
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </label>
+            </div>
+
+            <label class="field" id="motion-randomness-amount-field" hidden>
+              <div class="field-label">
+                <span>Randomness amount</span>
+                <span class="field-value" id="val-motion-randomness-amount">40%</span>
+              </div>
+              <input type="range" id="ctrl-motion-randomness-amount" min="0" max="100" step="5" value="40" />
+            </label>
+          </div>
         </section>
 
         <section class="panel-group" id="line-settings" hidden>

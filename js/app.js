@@ -26,6 +26,13 @@
     imageData: null, // cached ImageData of the work canvas
     workW: 0,
     workH: 0,
+    motionEnabled: false,
+    motionShape: "circular", // 'circular' | 'square' | 'triangular' | 'star'
+    motionSpeed: 1,
+    motionAmplitude: 0.6,
+    motionRandomness: false,
+    motionRandomnessAmount: 0.4,
+    ballNodes: [], // {el, cx, cy, cellSize, rnd} — rebuilt every render() when shape === 'balls'
   };
 
   // Elements
@@ -47,6 +54,17 @@
     labelStatCount: document.getElementById("label-stat-count"),
     ctrlScale: document.getElementById("ctrl-scale"),
     valScale: document.getElementById("val-scale"),
+    ctrlMotionEnabled: document.getElementById("ctrl-motion-enabled"),
+    motionControls: document.getElementById("motion-controls"),
+    motionShapeGroup: document.getElementById("motion-shape"),
+    ctrlMotionSpeed: document.getElementById("ctrl-motion-speed"),
+    valMotionSpeed: document.getElementById("val-motion-speed"),
+    ctrlMotionAmplitude: document.getElementById("ctrl-motion-amplitude"),
+    valMotionAmplitude: document.getElementById("val-motion-amplitude"),
+    ctrlMotionRandomness: document.getElementById("ctrl-motion-randomness"),
+    motionRandomnessAmountField: document.getElementById("motion-randomness-amount-field"),
+    ctrlMotionRandomnessAmount: document.getElementById("ctrl-motion-randomness-amount"),
+    valMotionRandomnessAmount: document.getElementById("val-motion-randomness-amount"),
     ctrlDensity: document.getElementById("ctrl-density"),
     valDensity: document.getElementById("val-density"),
     ctrlThreshold: document.getElementById("ctrl-threshold"),
@@ -171,6 +189,7 @@
     el.btnExportPng.disabled = false;
     drawToWorkCanvas(img, naturalW, naturalH);
     render();
+    startMotionLoop();
   }
 
   function drawToWorkCanvas(img, naturalW, naturalH) {
@@ -205,6 +224,31 @@
     h = (h ^ (h >>> 13)) * 3266489917;
     h = h ^ (h >>> 16);
     return (h >>> 0) / 4294967295;
+  }
+
+  // Relative radius (vs. a circle) of a regular polygon's boundary at angle theta.
+  // Level sets of actualDistance / regularPolygonRadius(...) trace scaled copies
+  // of the polygon, which is what turns a circular wavefront into a polygonal one.
+  function regularPolygonRadius(theta, sides, rotation) {
+    const a = (2 * Math.PI) / sides;
+    const angle = theta - rotation;
+    const segment = Math.round(angle / a);
+    const phi = angle - segment * a;
+    return Math.cos(a / 2) / Math.cos(phi);
+  }
+
+  function motionShapeFactor(theta, shape) {
+    switch (shape) {
+      case "square":
+        return regularPolygonRadius(theta, 4, 0);
+      case "triangular":
+        return regularPolygonRadius(theta, 3, -Math.PI / 2);
+      case "star":
+        return 1 + 0.35 * Math.cos(5 * theta);
+      case "circular":
+      default:
+        return 1;
+    }
   }
 
   function sampleCell(x0, y0, x1, y1) {
@@ -261,6 +305,7 @@
 
     const fragment = document.createDocumentFragment();
     let count = 0;
+    state.ballNodes = [];
 
     for (let row = 0; row < rows; row++) {
       const y0 = row * cellSize;
@@ -279,7 +324,7 @@
         const shape =
           state.shape === "lines"
             ? makeLine(row, col, x0, y0, cellSize, sample, color)
-            : makeBall(x0, y0, cellSize, sample, color);
+            : makeBall(row, col, x0, y0, cellSize, sample, color);
 
         if (!shape) continue;
         fragment.appendChild(shape);
@@ -291,7 +336,7 @@
     el.statCount.textContent = count.toLocaleString();
   }
 
-  function makeBall(x0, y0, cellSize, sample, color) {
+  function makeBall(row, col, x0, y0, cellSize, sample, color) {
     const radius = (cellSize / 2) * state.scale;
     if (radius <= 0) return null;
 
@@ -304,6 +349,15 @@
     circle.setAttribute("r", radius.toFixed(2));
     circle.setAttribute("fill", color);
     circle.setAttribute("fill-opacity", sample.a.toFixed(2));
+
+    state.ballNodes.push({
+      el: circle,
+      cx,
+      cy,
+      cellSize,
+      rnd: cellRandom(row, col, 7),
+    });
+
     return circle;
   }
 
@@ -333,6 +387,68 @@
     line.setAttribute("stroke-opacity", sample.a.toFixed(2));
     line.setAttribute("stroke-linecap", "round");
     return line;
+  }
+
+  // ---------- Motion ----------
+
+  let motionRafId = null;
+  let motionStartTime = null;
+  const MOTION_PERIOD = 4; // seconds for one center-to-edge sweep at speed = 1
+
+  function motionTick(timestamp) {
+    if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) {
+      motionRafId = null;
+      return;
+    }
+    if (motionStartTime === null) motionStartTime = timestamp;
+
+    const dims = RATIOS[state.ratio];
+    const centerX = dims.w / 2;
+    const centerY = dims.h / 2;
+    // Generous buffer over the corner distance so polygonal/star wavefronts
+    // (which can reach beyond a circle in some directions) still fully clear the canvas.
+    const maxDist = Math.sqrt(centerX * centerX + centerY * centerY) * 1.5;
+    const waveWidth = maxDist * 0.14;
+
+    const elapsed = (timestamp - motionStartTime) / 1000;
+    const phase = (elapsed * state.motionSpeed) / MOTION_PERIOD % 1;
+    const waveRadius = phase * maxDist;
+
+    for (const b of state.ballNodes) {
+      const dx = b.cx - centerX;
+      const dy = b.cy - centerY;
+      const theta = Math.atan2(dy, dx);
+      const actualDist = Math.sqrt(dx * dx + dy * dy);
+      const effDist = actualDist / motionShapeFactor(theta, state.motionShape);
+
+      const diff = (effDist - waveRadius) / waveWidth;
+      const pulse = Math.max(0, 1 - Math.abs(diff));
+
+      let amp = state.motionAmplitude * pulse;
+      if (state.motionRandomness) {
+        amp *= 1 + (b.rnd * 2 - 1) * state.motionRandomnessAmount;
+      }
+
+      const finalScale = state.scale * (1 + amp);
+      const radius = Math.max(0, (b.cellSize / 2) * finalScale);
+      b.el.setAttribute("r", radius.toFixed(2));
+    }
+
+    motionRafId = requestAnimationFrame(motionTick);
+  }
+
+  function startMotionLoop() {
+    if (motionRafId !== null) return;
+    if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) return;
+    motionStartTime = null;
+    motionRafId = requestAnimationFrame(motionTick);
+  }
+
+  function stopMotionLoop() {
+    if (motionRafId !== null) {
+      cancelAnimationFrame(motionRafId);
+      motionRafId = null;
+    }
   }
 
   // ---------- Controls wiring ----------
@@ -387,12 +503,58 @@
     el.labelDensity.textContent = isLines ? "Line density" : "Ball density";
     el.labelStatCount.textContent = isLines ? "Lines rendered" : "Balls rendered";
     render();
+
+    if (isLines) {
+      stopMotionLoop();
+    } else {
+      startMotionLoop();
+    }
   });
 
   el.ctrlScale.addEventListener("input", () => {
     state.scale = parseFloat(el.ctrlScale.value);
     el.valScale.textContent = state.scale.toFixed(2);
     render();
+  });
+
+  el.ctrlMotionEnabled.addEventListener("change", () => {
+    state.motionEnabled = el.ctrlMotionEnabled.checked;
+    el.motionControls.hidden = !state.motionEnabled;
+    if (state.motionEnabled) {
+      startMotionLoop();
+    } else {
+      stopMotionLoop();
+      render(); // restore static ball scale immediately
+    }
+  });
+
+  el.motionShapeGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".segmented-btn");
+    if (!btn) return;
+    state.motionShape = btn.dataset.shape;
+    [...el.motionShapeGroup.children].forEach((b) => b.classList.toggle("active", b === btn));
+  });
+
+  el.ctrlMotionSpeed.addEventListener("input", () => {
+    state.motionSpeed = parseFloat(el.ctrlMotionSpeed.value);
+    el.valMotionSpeed.textContent = state.motionSpeed.toFixed(2);
+  });
+
+  el.ctrlMotionAmplitude.addEventListener("input", () => {
+    const pct = parseInt(el.ctrlMotionAmplitude.value, 10);
+    state.motionAmplitude = pct / 100;
+    el.valMotionAmplitude.textContent = `${pct}%`;
+  });
+
+  el.ctrlMotionRandomness.addEventListener("change", () => {
+    state.motionRandomness = el.ctrlMotionRandomness.checked;
+    el.motionRandomnessAmountField.hidden = !state.motionRandomness;
+  });
+
+  el.ctrlMotionRandomnessAmount.addEventListener("input", () => {
+    const pct = parseInt(el.ctrlMotionRandomnessAmount.value, 10);
+    state.motionRandomnessAmount = pct / 100;
+    el.valMotionRandomnessAmount.textContent = `${pct}%`;
   });
 
   el.ctrlDensity.addEventListener("input", () => {
