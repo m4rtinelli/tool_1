@@ -29,6 +29,7 @@
     motionEnabled: false,
     motionShape: "circular", // 'circular' | 'square' | 'triangular' | 'star'
     motionSpeed: 1,
+    motionWaveCount: 3, // how many concentric ripples span the canvas at once
     motionAmplitude: 0.6,
     motionRandomness: false,
     motionRandomnessAmount: 0.4,
@@ -59,6 +60,8 @@
     motionShapeGroup: document.getElementById("motion-shape"),
     ctrlMotionSpeed: document.getElementById("ctrl-motion-speed"),
     valMotionSpeed: document.getElementById("val-motion-speed"),
+    ctrlMotionWaves: document.getElementById("ctrl-motion-waves"),
+    valMotionWaves: document.getElementById("val-motion-waves"),
     ctrlMotionAmplitude: document.getElementById("ctrl-motion-amplitude"),
     valMotionAmplitude: document.getElementById("val-motion-amplitude"),
     ctrlMotionRandomness: document.getElementById("ctrl-motion-randomness"),
@@ -393,7 +396,7 @@
 
   let motionRafId = null;
   let motionStartTime = null;
-  const MOTION_PERIOD = 4; // seconds for one center-to-edge sweep at speed = 1
+  const MOTION_PERIOD = 4; // seconds for a ripple to travel one full wavelength at speed = 1
 
   function motionTick(timestamp) {
     if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) {
@@ -408,11 +411,11 @@
     // Generous buffer over the corner distance so polygonal/star wavefronts
     // (which can reach beyond a circle in some directions) still fully clear the canvas.
     const maxDist = Math.sqrt(centerX * centerX + centerY * centerY) * 1.5;
-    const waveWidth = maxDist * 0.14;
+    const wavelength = maxDist / state.motionWaveCount;
 
     const elapsed = (timestamp - motionStartTime) / 1000;
-    const phase = (elapsed * state.motionSpeed) / MOTION_PERIOD % 1;
-    const waveRadius = phase * maxDist;
+    const offsetDist = (elapsed * state.motionSpeed * wavelength) / MOTION_PERIOD;
+    const k = (2 * Math.PI) / wavelength;
 
     for (const b of state.ballNodes) {
       const dx = b.cx - centerX;
@@ -421,8 +424,9 @@
       const actualDist = Math.sqrt(dx * dx + dy * dy);
       const effDist = actualDist / motionShapeFactor(theta, state.motionShape);
 
-      const diff = (effDist - waveRadius) / waveWidth;
-      const pulse = Math.max(0, 1 - Math.abs(diff));
+      // Continuous outward-traveling sine wave: every ball is always oscillating,
+      // with `motionWaveCount` ripples visible across the canvas at any moment.
+      const pulse = (Math.cos(k * (effDist - offsetDist)) + 1) / 2;
 
       let amp = state.motionAmplitude * pulse;
       if (state.motionRandomness) {
@@ -538,6 +542,11 @@
   el.ctrlMotionSpeed.addEventListener("input", () => {
     state.motionSpeed = parseFloat(el.ctrlMotionSpeed.value);
     el.valMotionSpeed.textContent = state.motionSpeed.toFixed(2);
+  });
+
+  el.ctrlMotionWaves.addEventListener("input", () => {
+    state.motionWaveCount = parseInt(el.ctrlMotionWaves.value, 10);
+    el.valMotionWaves.textContent = String(state.motionWaveCount);
   });
 
   el.ctrlMotionAmplitude.addEventListener("input", () => {
