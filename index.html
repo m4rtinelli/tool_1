@@ -35,19 +35,19 @@
         </section>
 
         <section class="panel-group">
-          <h3>Balls</h3>
+          <h3>Shape</h3>
+          <div class="segmented" id="shape-mode">
+            <button class="segmented-btn active" data-mode="balls">Balls</button>
+            <button class="segmented-btn" data-mode="lines">Lines</button>
+          </div>
+        </section>
+
+        <section class="panel-group">
+          <h3>Grid</h3>
 
           <label class="field">
             <div class="field-label">
-              <span>Ball scale</span>
-              <span class="field-value" id="val-scale">1.00</span>
-            </div>
-            <input type="range" id="ctrl-scale" min="0.1" max="1.8" step="0.01" value="1" />
-          </label>
-
-          <label class="field">
-            <div class="field-label">
-              <span>Ball density</span>
+              <span id="label-density">Ball density</span>
               <span class="field-value" id="val-density">48</span>
             </div>
             <input type="range" id="ctrl-density" min="4" max="150" step="1" value="48" />
@@ -59,6 +59,62 @@
               <span class="field-value" id="val-threshold">4%</span>
             </div>
             <input type="range" id="ctrl-threshold" min="0" max="50" step="1" value="4" />
+          </label>
+        </section>
+
+        <section class="panel-group" id="ball-settings">
+          <h3>Balls</h3>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Ball scale</span>
+              <span class="field-value" id="val-scale">1.00</span>
+            </div>
+            <input type="range" id="ctrl-scale" min="0.1" max="1.8" step="0.01" value="1" />
+          </label>
+        </section>
+
+        <section class="panel-group" id="line-settings" hidden>
+          <h3>Lines</h3>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Line scale</span>
+              <span class="field-value" id="val-line-scale">1.00</span>
+            </div>
+            <input type="range" id="ctrl-line-scale" min="0.1" max="2.5" step="0.01" value="1" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Line thickness</span>
+              <span class="field-value" id="val-line-thickness">0.12</span>
+            </div>
+            <input type="range" id="ctrl-line-thickness" min="0.02" max="0.6" step="0.01" value="0.12" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Line angle</span>
+              <span class="field-value" id="val-line-angle">45°</span>
+            </div>
+            <input type="range" id="ctrl-line-angle" min="0" max="360" step="1" value="45" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Angle jitter</span>
+              <span class="field-value" id="val-line-angle-jitter">0°</span>
+            </div>
+            <input type="range" id="ctrl-line-angle-jitter" min="0" max="90" step="1" value="0" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Position jitter</span>
+              <span class="field-value" id="val-line-position-jitter">0%</span>
+            </div>
+            <input type="range" id="ctrl-line-position-jitter" min="0" max="100" step="1" value="0" />
           </label>
         </section>
 
@@ -89,7 +145,7 @@
 
         <section class="panel-group panel-group-footer">
           <div class="stat-row">
-            <span>Balls rendered</span>
+            <span id="label-stat-count">Balls rendered</span>
             <span id="stat-count">0</span>
           </div>
         </section>

@@ -9,9 +9,15 @@
 
   const state = {
     ratio: "1:1",
+    shape: "balls", // 'balls' | 'lines'
     scale: 1,
     density: 48,
     threshold: 0.04,
+    lineScale: 1,
+    lineThickness: 0.12,
+    lineAngle: 45,
+    lineAngleJitter: 0,
+    linePositionJitter: 0,
     colorMode: "sample", // 'sample' | 'solid'
     solidColor: "#3d5afe",
     bgMode: "transparent", // 'transparent' | 'white' | 'solid'
@@ -34,12 +40,27 @@
     stage: document.querySelector(".stage"),
     svg: document.getElementById("output-svg"),
     emptyState: document.getElementById("empty-state"),
+    shapeModeGroup: document.getElementById("shape-mode"),
+    ballSettings: document.getElementById("ball-settings"),
+    lineSettings: document.getElementById("line-settings"),
+    labelDensity: document.getElementById("label-density"),
+    labelStatCount: document.getElementById("label-stat-count"),
     ctrlScale: document.getElementById("ctrl-scale"),
     valScale: document.getElementById("val-scale"),
     ctrlDensity: document.getElementById("ctrl-density"),
     valDensity: document.getElementById("val-density"),
     ctrlThreshold: document.getElementById("ctrl-threshold"),
     valThreshold: document.getElementById("val-threshold"),
+    ctrlLineScale: document.getElementById("ctrl-line-scale"),
+    valLineScale: document.getElementById("val-line-scale"),
+    ctrlLineThickness: document.getElementById("ctrl-line-thickness"),
+    valLineThickness: document.getElementById("val-line-thickness"),
+    ctrlLineAngle: document.getElementById("ctrl-line-angle"),
+    valLineAngle: document.getElementById("val-line-angle"),
+    ctrlLineAngleJitter: document.getElementById("ctrl-line-angle-jitter"),
+    valLineAngleJitter: document.getElementById("val-line-angle-jitter"),
+    ctrlLinePositionJitter: document.getElementById("ctrl-line-position-jitter"),
+    valLinePositionJitter: document.getElementById("val-line-position-jitter"),
     colorModeGroup: document.getElementById("color-mode"),
     solidColorField: document.getElementById("solid-color-field"),
     ctrlColor: document.getElementById("ctrl-color"),
@@ -174,7 +195,17 @@
     state.lastNaturalH = naturalH;
   }
 
-  // ---------- Ball rendering ----------
+  // ---------- Shape rendering ----------
+
+  // Deterministic per-cell pseudo-random in [0, 1), stable across re-renders
+  // unless the grid itself (row/col count) changes.
+  function cellRandom(row, col, salt) {
+    let h = (row * 92821 + col * 51749 + salt * 12841) | 0;
+    h = (h ^ (h >>> 15)) * 2246822519;
+    h = (h ^ (h >>> 13)) * 3266489917;
+    h = h ^ (h >>> 16);
+    return (h >>> 0) / 4294967295;
+  }
 
   function sampleCell(x0, y0, x1, y1) {
     const { data, width } = state.imageData;
@@ -240,29 +271,68 @@
         const sample = sampleCell(x0, y0, x1, y1);
         if (sample.a < state.threshold) continue;
 
-        const cx = x0 + cellSize / 2;
-        const cy = y0 + cellSize / 2;
-        const radius = (cellSize / 2) * state.scale;
-        if (radius <= 0) continue;
-
-        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        circle.setAttribute("cx", cx.toFixed(2));
-        circle.setAttribute("cy", cy.toFixed(2));
-        circle.setAttribute("r", radius.toFixed(2));
-        circle.setAttribute(
-          "fill",
+        const color =
           state.colorMode === "sample"
             ? `rgb(${sample.r},${sample.g},${sample.b})`
-            : state.solidColor
-        );
-        circle.setAttribute("fill-opacity", sample.a.toFixed(2));
-        fragment.appendChild(circle);
+            : state.solidColor;
+
+        const shape =
+          state.shape === "lines"
+            ? makeLine(row, col, x0, y0, cellSize, sample, color)
+            : makeBall(x0, y0, cellSize, sample, color);
+
+        if (!shape) continue;
+        fragment.appendChild(shape);
         count++;
       }
     }
 
     el.svg.appendChild(fragment);
     el.statCount.textContent = count.toLocaleString();
+  }
+
+  function makeBall(x0, y0, cellSize, sample, color) {
+    const radius = (cellSize / 2) * state.scale;
+    if (radius <= 0) return null;
+
+    const cx = x0 + cellSize / 2;
+    const cy = y0 + cellSize / 2;
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", cx.toFixed(2));
+    circle.setAttribute("cy", cy.toFixed(2));
+    circle.setAttribute("r", radius.toFixed(2));
+    circle.setAttribute("fill", color);
+    circle.setAttribute("fill-opacity", sample.a.toFixed(2));
+    return circle;
+  }
+
+  function makeLine(row, col, x0, y0, cellSize, sample, color) {
+    const length = cellSize * state.lineScale;
+    const thickness = cellSize * state.lineThickness;
+    if (length <= 0 || thickness <= 0) return null;
+
+    const posJitterAmount = (state.linePositionJitter / 100) * (cellSize / 2);
+    const jx = (cellRandom(row, col, 1) * 2 - 1) * posJitterAmount;
+    const jy = (cellRandom(row, col, 2) * 2 - 1) * posJitterAmount;
+    const cx = x0 + cellSize / 2 + jx;
+    const cy = y0 + cellSize / 2 + jy;
+
+    const angleJitter = (cellRandom(row, col, 3) * 2 - 1) * state.lineAngleJitter;
+    const angleRad = ((state.lineAngle + angleJitter) * Math.PI) / 180;
+    const dx = (Math.cos(angleRad) * length) / 2;
+    const dy = (Math.sin(angleRad) * length) / 2;
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", (cx - dx).toFixed(2));
+    line.setAttribute("y1", (cy - dy).toFixed(2));
+    line.setAttribute("x2", (cx + dx).toFixed(2));
+    line.setAttribute("y2", (cy + dy).toFixed(2));
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", thickness.toFixed(2));
+    line.setAttribute("stroke-opacity", sample.a.toFixed(2));
+    line.setAttribute("stroke-linecap", "round");
+    return line;
   }
 
   // ---------- Controls wiring ----------
@@ -305,6 +375,20 @@
     render();
   });
 
+  el.shapeModeGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".segmented-btn");
+    if (!btn) return;
+    state.shape = btn.dataset.mode;
+    [...el.shapeModeGroup.children].forEach((b) => b.classList.toggle("active", b === btn));
+
+    const isLines = state.shape === "lines";
+    el.ballSettings.hidden = isLines;
+    el.lineSettings.hidden = !isLines;
+    el.labelDensity.textContent = isLines ? "Line density" : "Ball density";
+    el.labelStatCount.textContent = isLines ? "Lines rendered" : "Balls rendered";
+    render();
+  });
+
   el.ctrlScale.addEventListener("input", () => {
     state.scale = parseFloat(el.ctrlScale.value);
     el.valScale.textContent = state.scale.toFixed(2);
@@ -321,6 +405,36 @@
     const pct = parseInt(el.ctrlThreshold.value, 10);
     state.threshold = pct / 100;
     el.valThreshold.textContent = `${pct}%`;
+    render();
+  });
+
+  el.ctrlLineScale.addEventListener("input", () => {
+    state.lineScale = parseFloat(el.ctrlLineScale.value);
+    el.valLineScale.textContent = state.lineScale.toFixed(2);
+    render();
+  });
+
+  el.ctrlLineThickness.addEventListener("input", () => {
+    state.lineThickness = parseFloat(el.ctrlLineThickness.value);
+    el.valLineThickness.textContent = state.lineThickness.toFixed(2);
+    render();
+  });
+
+  el.ctrlLineAngle.addEventListener("input", () => {
+    state.lineAngle = parseFloat(el.ctrlLineAngle.value);
+    el.valLineAngle.textContent = `${state.lineAngle}°`;
+    render();
+  });
+
+  el.ctrlLineAngleJitter.addEventListener("input", () => {
+    state.lineAngleJitter = parseFloat(el.ctrlLineAngleJitter.value);
+    el.valLineAngleJitter.textContent = `${state.lineAngleJitter}°`;
+    render();
+  });
+
+  el.ctrlLinePositionJitter.addEventListener("input", () => {
+    state.linePositionJitter = parseFloat(el.ctrlLinePositionJitter.value);
+    el.valLinePositionJitter.textContent = `${state.linePositionJitter}%`;
     render();
   });
 
@@ -378,7 +492,7 @@
   el.btnExportSvg.addEventListener("click", () => {
     if (!state.hasImage) return;
     const svgString = serializeSvg();
-    download(new Blob([svgString], { type: "image/svg+xml" }), "ball-svg.svg");
+    download(new Blob([svgString], { type: "image/svg+xml" }), `${state.shape}-svg.svg`);
   });
 
   el.btnExportPng.addEventListener("click", () => {
@@ -396,7 +510,7 @@
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
-        download(blob, "ball-svg.png");
+        download(blob, `${state.shape}-svg.png`);
         URL.revokeObjectURL(url);
       }, "image/png");
     };
