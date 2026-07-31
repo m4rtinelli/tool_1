@@ -26,6 +26,7 @@
     imageData: null, // cached ImageData of the work canvas
     workW: 0,
     workH: 0,
+    lineNodes: [], // {el, cx, cy, angleRad, cellSize, rnd} — rebuilt every render() when shape === 'lines'
     motionEnabled: false,
     motionShape: "circular", // 'circular' | 'square' | 'triangular' | 'star'
     motionPosX: 0.5, // fraction of canvas width/height, 0-1
@@ -59,6 +60,8 @@
     valScale: document.getElementById("val-scale"),
     ctrlMotionEnabled: document.getElementById("ctrl-motion-enabled"),
     motionControls: document.getElementById("motion-controls"),
+    motionHint: document.getElementById("motion-hint"),
+    labelMotionRandomness: document.getElementById("label-motion-randomness"),
     motionShapeGroup: document.getElementById("motion-shape"),
     motionPosPad: document.getElementById("motion-pos-pad"),
     motionPosDot: document.getElementById("motion-pos-dot"),
@@ -314,6 +317,7 @@
     const fragment = document.createDocumentFragment();
     let count = 0;
     state.ballNodes = [];
+    state.lineNodes = [];
 
     for (let row = 0; row < rows; row++) {
       const y0 = row * cellSize;
@@ -394,6 +398,16 @@
     line.setAttribute("stroke-width", thickness.toFixed(2));
     line.setAttribute("stroke-opacity", sample.a.toFixed(2));
     line.setAttribute("stroke-linecap", "round");
+
+    state.lineNodes.push({
+      el: line,
+      cx,
+      cy,
+      angleRad,
+      cellSize,
+      rnd: cellRandom(row, col, 7),
+    });
+
     return line;
   }
 
@@ -414,8 +428,27 @@
     return max;
   }
 
+  function motionApplicable() {
+    return (
+      state.motionEnabled &&
+      state.hasImage &&
+      (state.shape === "balls" || state.shape === "lines")
+    );
+  }
+
+  function pulseAt(cx, cy, centerX, centerY, k, offsetDist) {
+    const dx = cx - centerX;
+    const dy = cy - centerY;
+    const theta = Math.atan2(dy, dx);
+    const actualDist = Math.sqrt(dx * dx + dy * dy);
+    const effDist = actualDist / motionShapeFactor(theta, state.motionShape);
+    // Continuous outward-traveling sine wave: every shape is always oscillating,
+    // with `motionWaveCount` ripples visible across the canvas at any moment.
+    return (Math.cos(k * (effDist - offsetDist)) + 1) / 2;
+  }
+
   function motionTick(timestamp) {
-    if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) {
+    if (!motionApplicable()) {
       motionRafId = null;
       return;
     }
@@ -433,25 +466,35 @@
     const offsetDist = (elapsed * state.motionSpeed * wavelength) / MOTION_PERIOD;
     const k = (2 * Math.PI) / wavelength;
 
-    for (const b of state.ballNodes) {
-      const dx = b.cx - centerX;
-      const dy = b.cy - centerY;
-      const theta = Math.atan2(dy, dx);
-      const actualDist = Math.sqrt(dx * dx + dy * dy);
-      const effDist = actualDist / motionShapeFactor(theta, state.motionShape);
-
-      // Continuous outward-traveling sine wave: every ball is always oscillating,
-      // with `motionWaveCount` ripples visible across the canvas at any moment.
-      const pulse = (Math.cos(k * (effDist - offsetDist)) + 1) / 2;
-
-      let amp = state.motionAmplitude * pulse;
-      if (state.motionRandomness) {
-        amp *= 1 + (b.rnd * 2 - 1) * state.motionRandomnessAmount;
+    if (state.shape === "balls") {
+      for (const b of state.ballNodes) {
+        const pulse = pulseAt(b.cx, b.cy, centerX, centerY, k, offsetDist);
+        let amp = state.motionAmplitude * pulse;
+        if (state.motionRandomness) {
+          amp *= 1 + (b.rnd * 2 - 1) * state.motionRandomnessAmount;
+        }
+        const finalScale = state.scale * (1 + amp);
+        const radius = Math.max(0, (b.cellSize / 2) * finalScale);
+        b.el.setAttribute("r", radius.toFixed(2));
       }
-
-      const finalScale = state.scale * (1 + amp);
-      const radius = Math.max(0, (b.cellSize / 2) * finalScale);
-      b.el.setAttribute("r", radius.toFixed(2));
+    } else {
+      for (const l of state.lineNodes) {
+        const pulse = pulseAt(l.cx, l.cy, centerX, centerY, k, offsetDist);
+        let amp = state.motionAmplitude * pulse;
+        if (state.motionRandomness) {
+          amp *= 1 + (l.rnd * 2 - 1) * state.motionRandomnessAmount;
+        }
+        const length = Math.max(0, l.cellSize * state.lineScale * (1 + amp));
+        const thickness = Math.max(0, l.cellSize * state.lineThickness * (1 + amp));
+        const half = length / 2;
+        const dx = Math.cos(l.angleRad) * half;
+        const dy = Math.sin(l.angleRad) * half;
+        l.el.setAttribute("x1", (l.cx - dx).toFixed(2));
+        l.el.setAttribute("y1", (l.cy - dy).toFixed(2));
+        l.el.setAttribute("x2", (l.cx + dx).toFixed(2));
+        l.el.setAttribute("y2", (l.cy + dy).toFixed(2));
+        l.el.setAttribute("stroke-width", thickness.toFixed(2));
+      }
     }
 
     motionRafId = requestAnimationFrame(motionTick);
@@ -459,7 +502,7 @@
 
   function startMotionLoop() {
     if (motionRafId !== null) return;
-    if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) return;
+    if (!motionApplicable()) return;
     motionStartTime = null;
     motionRafId = requestAnimationFrame(motionTick);
   }
@@ -522,13 +565,12 @@
     el.lineSettings.hidden = !isLines;
     el.labelDensity.textContent = isLines ? "Line density" : "Ball density";
     el.labelStatCount.textContent = isLines ? "Lines rendered" : "Balls rendered";
+    el.motionHint.textContent = isLines
+      ? "Waves change the line width and thickness as the effector passes through them."
+      : "Waves scale the balls as the effector passes through them.";
+    el.labelMotionRandomness.textContent = isLines ? "Randomize line scale" : "Randomize ball scale";
     render();
-
-    if (isLines) {
-      stopMotionLoop();
-    } else {
-      startMotionLoop();
-    }
+    startMotionLoop();
   });
 
   el.ctrlScale.addEventListener("input", () => {
@@ -544,7 +586,7 @@
       startMotionLoop();
     } else {
       stopMotionLoop();
-      render(); // restore static ball scale immediately
+      render(); // restore static scale/thickness immediately
     }
   });
 
