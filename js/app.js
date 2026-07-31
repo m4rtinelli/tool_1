@@ -28,6 +28,8 @@
     workH: 0,
     motionEnabled: false,
     motionShape: "circular", // 'circular' | 'square' | 'triangular' | 'star'
+    motionPosX: 0.5, // fraction of canvas width/height, 0-1
+    motionPosY: 0.5,
     motionSpeed: 1,
     motionWaveCount: 3, // how many concentric ripples span the canvas at once
     motionAmplitude: 0.6,
@@ -58,6 +60,9 @@
     ctrlMotionEnabled: document.getElementById("ctrl-motion-enabled"),
     motionControls: document.getElementById("motion-controls"),
     motionShapeGroup: document.getElementById("motion-shape"),
+    motionPosPad: document.getElementById("motion-pos-pad"),
+    motionPosDot: document.getElementById("motion-pos-dot"),
+    valMotionPosition: document.getElementById("val-motion-position"),
     ctrlMotionSpeed: document.getElementById("ctrl-motion-speed"),
     valMotionSpeed: document.getElementById("val-motion-speed"),
     ctrlMotionWaves: document.getElementById("ctrl-motion-waves"),
@@ -398,6 +403,17 @@
   let motionStartTime = null;
   const MOTION_PERIOD = 4; // seconds for a ripple to travel one full wavelength at speed = 1
 
+  // Farthest a point at (cx, cy) can be from any corner of a w x h rect —
+  // used so the wave still reaches every edge even when the emission point is off-center.
+  function maxCornerDistance(cx, cy, w, h) {
+    let max = 0;
+    for (const [x, y] of [[0, 0], [w, 0], [0, h], [w, h]]) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > max) max = d;
+    }
+    return max;
+  }
+
   function motionTick(timestamp) {
     if (!state.motionEnabled || state.shape !== "balls" || !state.hasImage) {
       motionRafId = null;
@@ -406,11 +422,11 @@
     if (motionStartTime === null) motionStartTime = timestamp;
 
     const dims = RATIOS[state.ratio];
-    const centerX = dims.w / 2;
-    const centerY = dims.h / 2;
+    const centerX = dims.w * state.motionPosX;
+    const centerY = dims.h * state.motionPosY;
     // Generous buffer over the corner distance so polygonal/star wavefronts
     // (which can reach beyond a circle in some directions) still fully clear the canvas.
-    const maxDist = Math.sqrt(centerX * centerX + centerY * centerY) * 1.5;
+    const maxDist = maxCornerDistance(centerX, centerY, dims.w, dims.h) * 1.5;
     const wavelength = maxDist / state.motionWaveCount;
 
     const elapsed = (timestamp - motionStartTime) / 1000;
@@ -537,6 +553,43 @@
     if (!btn) return;
     state.motionShape = btn.dataset.shape;
     [...el.motionShapeGroup.children].forEach((b) => b.classList.toggle("active", b === btn));
+  });
+
+  function updateMotionPosUI() {
+    el.motionPosDot.style.left = `${(state.motionPosX * 100).toFixed(1)}%`;
+    el.motionPosDot.style.top = `${(state.motionPosY * 100).toFixed(1)}%`;
+    el.valMotionPosition.textContent = `${Math.round(state.motionPosX * 100)}%, ${Math.round(
+      state.motionPosY * 100
+    )}%`;
+  }
+
+  function setMotionPosFromPointer(e) {
+    const rect = el.motionPosPad.getBoundingClientRect();
+    state.motionPosX = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    state.motionPosY = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    updateMotionPosUI();
+  }
+
+  let draggingMotionPos = false;
+  el.motionPosPad.addEventListener("pointerdown", (e) => {
+    draggingMotionPos = true;
+    el.motionPosPad.setPointerCapture(e.pointerId);
+    setMotionPosFromPointer(e);
+  });
+  el.motionPosPad.addEventListener("pointermove", (e) => {
+    if (!draggingMotionPos) return;
+    setMotionPosFromPointer(e);
+  });
+  el.motionPosPad.addEventListener("pointerup", () => {
+    draggingMotionPos = false;
+  });
+  el.motionPosPad.addEventListener("pointercancel", () => {
+    draggingMotionPos = false;
+  });
+  el.motionPosPad.addEventListener("dblclick", () => {
+    state.motionPosX = 0.5;
+    state.motionPosY = 0.5;
+    updateMotionPosUI();
   });
 
   el.ctrlMotionSpeed.addEventListener("input", () => {
@@ -695,5 +748,6 @@
   // ---------- Init ----------
 
   fitFrame();
+  updateMotionPosUI();
   render();
 })();

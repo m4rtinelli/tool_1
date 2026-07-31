@@ -276,6 +276,54 @@ html, body {
   background: var(--accent);
 }
 
+/* Position pad */
+.position-pad {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 4px;
+  cursor: crosshair;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.position-pad-crosshair-h,
+.position-pad-crosshair-v {
+  position: absolute;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.position-pad-crosshair-h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+
+.position-pad-crosshair-v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.position-pad-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(61, 90, 254, 0.25);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 /* Fields */
 .field {
   display: block;
