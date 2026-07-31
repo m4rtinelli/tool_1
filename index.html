@@ -199,10 +199,32 @@
             <button class="segmented-btn active" data-mode="sample">Sample image</button>
             <button class="segmented-btn" data-mode="solid">Solid</button>
           </div>
-          <label class="field field-inline" id="solid-color-field" hidden>
-            <span>Ball color</span>
-            <input type="color" id="ctrl-color" value="#3d5afe" />
-          </label>
+
+          <div id="solid-color-controls" hidden>
+            <div class="segmented" id="fill-type">
+              <button class="segmented-btn active" data-fill="flat">Flat</button>
+              <button class="segmented-btn" data-fill="linear">Linear</button>
+              <button class="segmented-btn" data-fill="radial">Radial</button>
+            </div>
+
+            <label class="field field-inline">
+              <span id="label-color-a">Color</span>
+              <input type="color" id="ctrl-color-a" value="#3d5afe" />
+            </label>
+
+            <label class="field field-inline" id="color-b-field" hidden>
+              <span>Color B</span>
+              <input type="color" id="ctrl-color-b" value="#ff4d8d" />
+            </label>
+
+            <label class="field" id="gradient-angle-field" hidden>
+              <div class="field-label">
+                <span>Gradient angle</span>
+                <span class="field-value" id="val-gradient-angle">90°</span>
+              </div>
+              <input type="range" id="ctrl-gradient-angle" min="0" max="360" step="1" value="90" />
+            </label>
+          </div>
         </section>
 
         <section class="panel-group">

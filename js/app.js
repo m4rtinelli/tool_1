@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
   const RATIOS = {
     "1:1": { w: 1200, h: 1200 },
     "16:9": { w: 1200, h: 675 },
@@ -19,7 +21,10 @@
     lineAngleJitter: 0,
     linePositionJitter: 0,
     colorMode: "sample", // 'sample' | 'solid'
-    solidColor: "#3d5afe",
+    solidFillType: "flat", // 'flat' | 'linear' | 'radial'
+    solidColorA: "#3d5afe",
+    solidColorB: "#ff4d8d",
+    gradientAngle: 90,
     bgMode: "transparent", // 'transparent' | 'white' | 'solid'
     bgColor: "#0e0e12",
     hasImage: false,
@@ -91,8 +96,15 @@
     ctrlLinePositionJitter: document.getElementById("ctrl-line-position-jitter"),
     valLinePositionJitter: document.getElementById("val-line-position-jitter"),
     colorModeGroup: document.getElementById("color-mode"),
-    solidColorField: document.getElementById("solid-color-field"),
-    ctrlColor: document.getElementById("ctrl-color"),
+    solidColorControls: document.getElementById("solid-color-controls"),
+    fillTypeGroup: document.getElementById("fill-type"),
+    labelColorA: document.getElementById("label-color-a"),
+    ctrlColorA: document.getElementById("ctrl-color-a"),
+    colorBField: document.getElementById("color-b-field"),
+    ctrlColorB: document.getElementById("ctrl-color-b"),
+    gradientAngleField: document.getElementById("gradient-angle-field"),
+    ctrlGradientAngle: document.getElementById("ctrl-gradient-angle"),
+    valGradientAngle: document.getElementById("val-gradient-angle"),
     bgModeGroup: document.getElementById("bg-mode"),
     bgColorField: document.getElementById("bg-color-field"),
     ctrlBgColor: document.getElementById("ctrl-bg-color"),
@@ -290,6 +302,49 @@
     };
   }
 
+  const FILL_GRADIENT_ID = "fill-gradient";
+
+  function makeGradientStop(offset, color) {
+    const stop = document.createElementNS(SVG_NS, "stop");
+    stop.setAttribute("offset", String(offset));
+    stop.setAttribute("stop-color", color);
+    return stop;
+  }
+
+  // A single canvas-wide gradient (userSpaceOnUse) shared by every ball/line,
+  // so the color sweeps across the whole artwork rather than repeating per-shape.
+  function buildFillGradientDef(dims) {
+    const cx = dims.w / 2;
+    const cy = dims.h / 2;
+    const halfDiagonal = Math.sqrt(dims.w * dims.w + dims.h * dims.h) / 2;
+
+    let gradient;
+    if (state.solidFillType === "linear") {
+      const angleRad = (state.gradientAngle * Math.PI) / 180;
+      const dx = Math.cos(angleRad) * halfDiagonal;
+      const dy = Math.sin(angleRad) * halfDiagonal;
+      gradient = document.createElementNS(SVG_NS, "linearGradient");
+      gradient.setAttribute("x1", (cx - dx).toFixed(2));
+      gradient.setAttribute("y1", (cy - dy).toFixed(2));
+      gradient.setAttribute("x2", (cx + dx).toFixed(2));
+      gradient.setAttribute("y2", (cy + dy).toFixed(2));
+    } else {
+      gradient = document.createElementNS(SVG_NS, "radialGradient");
+      gradient.setAttribute("cx", cx.toFixed(2));
+      gradient.setAttribute("cy", cy.toFixed(2));
+      gradient.setAttribute("r", halfDiagonal.toFixed(2));
+    }
+
+    gradient.setAttribute("id", FILL_GRADIENT_ID);
+    gradient.setAttribute("gradientUnits", "userSpaceOnUse");
+    gradient.appendChild(makeGradientStop(0, state.solidColorA));
+    gradient.appendChild(makeGradientStop(1, state.solidColorB));
+
+    const defs = document.createElementNS(SVG_NS, "defs");
+    defs.appendChild(gradient);
+    return defs;
+  }
+
   function render() {
     while (el.svg.firstChild) el.svg.removeChild(el.svg.firstChild);
 
@@ -299,6 +354,16 @@
     }
 
     const dims = RATIOS[state.ratio];
+    const usesGradient = state.colorMode === "solid" && state.solidFillType !== "flat";
+    const fillValue = usesGradient
+      ? `url(#${FILL_GRADIENT_ID})`
+      : state.colorMode === "solid"
+      ? state.solidColorA
+      : null;
+
+    if (usesGradient) {
+      el.svg.appendChild(buildFillGradientDef(dims));
+    }
 
     if (state.bgMode !== "transparent") {
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -328,10 +393,7 @@
         const sample = sampleCell(x0, y0, x1, y1);
         if (sample.a < state.threshold) continue;
 
-        const color =
-          state.colorMode === "sample"
-            ? `rgb(${sample.r},${sample.g},${sample.b})`
-            : state.solidColor;
+        const color = state.colorMode === "sample" ? `rgb(${sample.r},${sample.g},${sample.b})` : fillValue;
 
         const shape =
           state.shape === "lines"
@@ -709,12 +771,36 @@
     if (!btn) return;
     state.colorMode = btn.dataset.mode;
     [...el.colorModeGroup.children].forEach((b) => b.classList.toggle("active", b === btn));
-    el.solidColorField.hidden = state.colorMode !== "solid";
+    el.solidColorControls.hidden = state.colorMode !== "solid";
     render();
   });
 
-  el.ctrlColor.addEventListener("input", () => {
-    state.solidColor = el.ctrlColor.value;
+  el.fillTypeGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".segmented-btn");
+    if (!btn) return;
+    state.solidFillType = btn.dataset.fill;
+    [...el.fillTypeGroup.children].forEach((b) => b.classList.toggle("active", b === btn));
+
+    const isGradient = state.solidFillType !== "flat";
+    el.labelColorA.textContent = isGradient ? "Color A" : "Color";
+    el.colorBField.hidden = !isGradient;
+    el.gradientAngleField.hidden = state.solidFillType !== "linear";
+    render();
+  });
+
+  el.ctrlColorA.addEventListener("input", () => {
+    state.solidColorA = el.ctrlColorA.value;
+    render();
+  });
+
+  el.ctrlColorB.addEventListener("input", () => {
+    state.solidColorB = el.ctrlColorB.value;
+    render();
+  });
+
+  el.ctrlGradientAngle.addEventListener("input", () => {
+    state.gradientAngle = parseFloat(el.ctrlGradientAngle.value);
+    el.valGradientAngle.textContent = `${state.gradientAngle}°`;
     render();
   });
 
