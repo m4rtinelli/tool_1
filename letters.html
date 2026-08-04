@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tool_1 — letters physics</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span class="brand-name">prototype_1</span>
+        <nav class="nav-links">
+          <a href="index.html">Dots &amp; Lines</a>
+          <a href="letters.html" class="active">Letters Physics</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-import" class="btn btn-ghost">Import SVG</button>
+        <input id="file-input" type="file" accept=".svg,image/svg+xml" hidden />
+        <button id="btn-import-multi" class="btn btn-ghost">Import letters</button>
+        <input id="file-input-multi" type="file" accept=".svg,image/svg+xml" multiple hidden />
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="panel">
+        <section class="panel-group">
+          <h3>Canvas</h3>
+          <div class="ratio-select" id="ratio-select">
+            <button class="ratio-btn active" data-ratio="1:1">1:1</button>
+            <button class="ratio-btn" data-ratio="16:9">16:9</button>
+            <button class="ratio-btn" data-ratio="9:16">9:16</button>
+          </div>
+        </section>
+
+        <section class="panel-group">
+          <h3>Layout</h3>
+          <div class="field-inline">
+            <span>Scatter positions</span>
+            <label class="switch">
+              <input type="checkbox" id="ctrl-scatter" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="hint" style="margin-top: 8px;">
+            Ignores the original layout: drops each letter at a random spot and angle across the
+            whole canvas, so big letters can overlap and bleed past the edges.
+          </p>
+
+          <div class="field-inline" style="margin-top: 14px;">
+            <span>Align letters on baseline</span>
+            <label class="switch">
+              <input type="checkbox" id="ctrl-align-baseline" checked />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="hint" style="margin-top: 8px;">
+            Applies to "Import letters" (one SVG per letter) when Scatter is off. When unchecked,
+            each letter gets a random vertical offset instead of sitting on one straight line.
+          </p>
+        </section>
+
+        <section class="panel-group" id="order-section" hidden>
+          <h3>Order</h3>
+          <div class="order-list" id="order-list"></div>
+          <p class="hint" style="margin-top: 8px;">
+            Sets the sequence used by "Appear one by one".
+          </p>
+        </section>
+
+        <section class="panel-group">
+          <h3>Physics</h3>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Gravity</span>
+              <span class="field-value" id="val-gravity">1.00</span>
+            </div>
+            <input type="range" id="ctrl-gravity" min="0" max="3" step="0.05" value="1" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Bounciness</span>
+              <span class="field-value" id="val-bounce">40%</span>
+            </div>
+            <input type="range" id="ctrl-bounce" min="0" max="100" step="1" value="40" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Friction</span>
+              <span class="field-value" id="val-friction">30%</span>
+            </div>
+            <input type="range" id="ctrl-friction" min="0" max="100" step="1" value="30" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Air drag</span>
+              <span class="field-value" id="val-air">1.0%</span>
+            </div>
+            <input type="range" id="ctrl-air" min="0" max="10" step="0.1" value="1" />
+          </label>
+
+          <label class="field">
+            <div class="field-label">
+              <span>Logo scale</span>
+              <span class="field-value" id="val-logo-scale">80%</span>
+            </div>
+            <input type="range" id="ctrl-logo-scale" min="20" max="400" step="5" value="80" />
+          </label>
+
+          <button id="btn-drop" class="btn btn-primary" style="width: 100%;" disabled>Drop again</button>
+          <button id="btn-drop-outside" class="btn btn-ghost" style="width: 100%; margin-top: 8px;" disabled>Drop from outside</button>
+          <button id="btn-drop-sequential" class="btn btn-ghost" style="width: 100%; margin-top: 8px;" disabled>Appear one by one</button>
+        </section>
+
+        <section class="panel-group">
+          <h3>Export</h3>
+          <div class="segmented" id="fps-mode" style="margin-bottom: 10px;">
+            <button class="segmented-btn" data-fps="30">30 fps</button>
+            <button class="segmented-btn active" data-fps="60">60 fps</button>
+          </div>
+          <button id="btn-export-video" class="btn btn-primary" style="width: 100%;" disabled>Export 10s video (60fps)</button>
+          <p class="hint" id="export-status" style="margin-top: 8px;"></p>
+        </section>
+
+        <section class="panel-group">
+          <h3>Mouse</h3>
+          <div class="field-inline">
+            <span>Mouse interaction</span>
+            <label class="switch">
+              <input type="checkbox" id="ctrl-mouse" checked />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="hint" style="margin-top: 8px;">Drag letters with the mouse to throw them around.</p>
+        </section>
+
+        <section class="panel-group">
+          <h3>Color</h3>
+          <div class="segmented" id="letter-color-mode">
+            <button class="segmented-btn active" data-mode="original">Original</button>
+            <button class="segmented-btn" data-mode="solid">Solid</button>
+          </div>
+          <label class="field field-inline" id="letter-color-field" hidden>
+            <span>Letter color</span>
+            <input type="color" id="ctrl-letter-color" value="#3d5afe" />
+          </label>
+        </section>
+
+        <section class="panel-group">
+          <h3>Background</h3>
+          <div class="segmented" id="bg-mode">
+            <button class="segmented-btn active" data-mode="dark">Dark</button>
+            <button class="segmented-btn" data-mode="white">White</button>
+            <button class="segmented-btn" data-mode="solid">Solid</button>
+          </div>
+          <label class="field field-inline" id="bg-color-field" hidden>
+            <span>Background color</span>
+            <input type="color" id="ctrl-bg-color" value="#0e0e12" />
+          </label>
+        </section>
+
+        <section class="panel-group panel-group-footer">
+          <div class="stat-row">
+            <span>Letters</span>
+            <span id="stat-count">0</span>
+          </div>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <div class="stage-frame" id="stage-frame">
+          <div class="empty-state" id="empty-state">
+            <p>Drop an SVG logo here — it will be split into letters.<br />
+              Or use "Import letters" to upload one SVG per letter.</p>
+            <button id="btn-import-empty" class="btn btn-primary">Import a SVG</button>
+          </div>
+          <canvas id="physics-canvas"></canvas>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/vendor/matter.min.js"></script>
+  <script src="js/letters.js"></script>
+</body>
+
+</html>

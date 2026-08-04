@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" width="720" height="160">
+  <text x="10"  y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#3d5afe">A</text>
+  <text x="110" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#5a4dff">S</text>
+  <text x="205" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#7c4dff">T</text>
+  <text x="295" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#9b4dff">R</text>
+  <text x="395" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#c04dff">I</text>
+  <text x="445" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#e04dd4">D</text>
+  <text x="550" y="120" font-family="Arial, sans-serif" font-size="130" font-weight="700" fill="#ff4d8d">E</text>
+</svg>
