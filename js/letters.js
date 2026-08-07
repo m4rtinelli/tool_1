@@ -11,6 +11,13 @@
   };
 
   const WALL_THICKNESS = 200;
+  // Much thicker than the side walls: a letter stacked far above the frame
+  // (big scale + "Drop from outside") can build up enough fall speed to
+  // tunnel straight through a thin floor in a single physics step and
+  // vanish below it forever. Kept separate from WALL_THICKNESS because
+  // widening the side walls the same way would extend them far enough
+  // inward to overlap letters that spawn off to the sides at big scale.
+  const FLOOR_THICKNESS = 4000;
   const RASTER_TARGET = 1400; // px used when rasterizing the source SVG for splitting
 
   const state = {
@@ -27,12 +34,13 @@
     bgMode: "dark", // 'dark' | 'white' | 'solid'
     bgColor: "#0e0e12",
     videoFps: 60, // 30 | 60
+    turbulence: false, // zero-G drift through a flow field instead of falling
+    turbulenceStrength: 0.5, // 0..1
+    turbulenceScale: 0.5, // 0..1 — how large the swirls are
     // Letters extracted from the imported SVG(s). Layout coords are relative to
     // the logo bounding box (0..1) so they can be re-fit to any canvas/scale.
     letters: [], // {img: canvas, w, h, relX, relY, relW, relH}
-    bodies: [], // matter bodies, parallel to letters (holes are null while a sequence is mid-reveal)
-    order: [], // indices into state.letters, controls "Appear one by one"
-    appearAt: [], // parallel to bodies; timestamp a letter's pop-in started, or null once done
+    bodies: [], // matter bodies, parallel to letters
   };
 
   const el = {
@@ -59,9 +67,13 @@
     valLogoScale: document.getElementById("val-logo-scale"),
     ctrlMouse: document.getElementById("ctrl-mouse"),
     btnDropOutside: document.getElementById("btn-drop-outside"),
-    btnDropSequential: document.getElementById("btn-drop-sequential"),
-    orderSection: document.getElementById("order-section"),
-    orderList: document.getElementById("order-list"),
+    ctrlTurbulence: document.getElementById("ctrl-turbulence"),
+    turbulenceField: document.getElementById("turbulence-field"),
+    ctrlTurbulenceStrength: document.getElementById("ctrl-turbulence-strength"),
+    valTurbulence: document.getElementById("val-turbulence"),
+    turbulenceScaleField: document.getElementById("turbulence-scale-field"),
+    ctrlTurbulenceScale: document.getElementById("ctrl-turbulence-scale"),
+    valTurbulenceScale: document.getElementById("val-turbulence-scale"),
     ctrlScatter: document.getElementById("ctrl-scatter"),
     ctrlAlignBaseline: document.getElementById("ctrl-align-baseline"),
     fpsModeGroup: document.getElementById("fps-mode"),
@@ -88,13 +100,33 @@
   function rebuildWalls() {
     for (const w of walls) Composite.remove(engine.world, w);
     const dims = RATIOS[state.ratio];
-    const t = WALL_THICKNESS;
     const opts = { isStatic: true, friction: 0.6 };
+    const ft = FLOOR_THICKNESS;
+    // Side walls sit just outside the frame edges and grow outward, so their
+    // thickness never intrudes on the canvas. They stay thin in normal mode
+    // because letters can legitimately spawn far out to the sides at big
+    // "Logo scale" — a thick wall would swallow them. Zero-G always spawns
+    // inside the frame, so there they can be thick enough that a fast
+    // drifting letter can't tunnel through and escape.
+    const t = state.turbulence ? ft : WALL_THICKNESS;
+    // "Logo scale" is unclamped, so at high values letters can spawn far
+    // outside the canvas horizontally — the floor has to reach well past
+    // the side walls or those letters just fall through open space beside
+    // it and never land.
     walls = [
-      Bodies.rectangle(dims.w / 2, dims.h + t / 2, dims.w + t * 4, t, opts), // floor
-      Bodies.rectangle(-t / 2, dims.h / 2, t, dims.h * 3, opts), // left
-      Bodies.rectangle(dims.w + t / 2, dims.h / 2, t, dims.h * 3, opts), // right
+      Bodies.rectangle(dims.w / 2, dims.h + ft / 2, dims.w * 12, ft, opts), // floor
+      Bodies.rectangle(-t / 2, dims.h / 2, t, dims.h * 6, opts), // left
+      Bodies.rectangle(dims.w + t / 2, dims.h / 2, t, dims.h * 6, opts), // right
     ];
+    // Only in zero-G: without gravity holding them down, letters would drift
+    // straight up and out of frame forever. Deliberately absent otherwise,
+    // since "Drop from outside" starts letters above the frame and a lid
+    // would block them from ever entering.
+    if (state.turbulence) {
+      walls.push(
+        Bodies.rectangle(dims.w / 2, -ft / 2, dims.w * 12, ft, opts), // ceiling
+      );
+    }
     Composite.add(engine.world, walls);
   }
 
@@ -398,67 +430,9 @@
     el.stageFrame.classList.add("has-image");
     el.btnDrop.disabled = false;
     el.btnDropOutside.disabled = false;
-    el.btnDropSequential.disabled = false;
     el.btnExportVideo.disabled = false;
     el.statCount.textContent = String(state.letters.length);
-
-    state.order = state.letters.map((_, i) => i);
-    el.orderSection.hidden = false;
-    renderOrderList();
-
     spawnBodies();
-  }
-
-  // ---------- Order ----------
-
-  function renderOrderList() {
-    el.orderList.innerHTML = "";
-    state.order.forEach((letterIndex, pos) => {
-      const letter = state.letters[letterIndex];
-
-      const item = document.createElement("div");
-      item.className = "order-item";
-
-      const label = document.createElement("span");
-      label.className = "order-item-index";
-      label.textContent = String(pos + 1);
-
-      const thumb = document.createElement("img");
-      thumb.className = "order-item-thumb";
-      thumb.src = letter.img.toDataURL();
-      thumb.alt = `Letter ${pos + 1}`;
-
-      const controls = document.createElement("div");
-      controls.className = "order-item-controls";
-
-      const upBtn = document.createElement("button");
-      upBtn.type = "button";
-      upBtn.className = "order-item-btn";
-      upBtn.textContent = "↑";
-      upBtn.disabled = pos === 0;
-      upBtn.addEventListener("click", () => moveOrder(pos, -1));
-
-      const downBtn = document.createElement("button");
-      downBtn.type = "button";
-      downBtn.className = "order-item-btn";
-      downBtn.textContent = "↓";
-      downBtn.disabled = pos === state.order.length - 1;
-      downBtn.addEventListener("click", () => moveOrder(pos, 1));
-
-      controls.append(upBtn, downBtn);
-      item.append(label, thumb, controls);
-      el.orderList.appendChild(item);
-    });
-  }
-
-  function moveOrder(pos, delta) {
-    const target = pos + delta;
-    if (target < 0 || target >= state.order.length) return;
-    [state.order[pos], state.order[target]] = [
-      state.order[target],
-      state.order[pos],
-    ];
-    renderOrderList();
   }
 
   // ---------- Bodies ----------
@@ -473,7 +447,6 @@
 
   // Position (and rotation) for one letter, independent of whether it's
   // ending up inside the frame or getting overridden for an "outside" start.
-  // Shared by the bulk spawn and the one-by-one sequence.
   function computeLetterPlacement(letter, dims, layout) {
     const { logoW, offsetX, offsetY } = layout;
     const w = Math.max(6, letter.relW * logoW);
@@ -512,6 +485,19 @@
     );
   }
 
+  function rotatedHalfWidth(w, h, angle) {
+    return (
+      (w / 2) * Math.abs(Math.cos(angle)) + (h / 2) * Math.abs(Math.sin(angle))
+    );
+  }
+
+  // Keep v within [lo, hi]; if the span is inverted (letter bigger than the
+  // frame) fall back to the midpoint rather than returning nonsense.
+  function clampRange(v, lo, hi) {
+    if (lo > hi) return (lo + hi) / 2;
+    return Math.min(hi, Math.max(lo, v));
+  }
+
   function makeLetterBody(cx, cy, jitterAngle, w, h) {
     const physW = w * 0.92;
     const physH = h * 0.92;
@@ -526,22 +512,31 @@
   }
 
   function spawnBodies({ fromOutside = false } = {}) {
-    stopSequence();
-    for (const b of state.bodies) if (b) Composite.remove(engine.world, b);
+    for (const b of state.bodies) Composite.remove(engine.world, b);
     state.bodies = [];
-    state.appearAt = new Array(state.letters.length).fill(null);
 
     const dims = RATIOS[state.ratio];
     const layout = computeLayout(dims);
+    // Zero-G puts a lid on the frame, so letters started above it could never
+    // get in — always place them inside while turbulence is running.
+    if (state.turbulence) fromOutside = false;
 
-    // When dropping from outside, stack letters into non-overlapping vertical
-    // bands (instead of independently randomizing each one) so none of their
-    // bounding boxes intersect at spawn. Scatter mode gives every letter a
-    // random X, so with big scale settings huge letters would otherwise land
-    // on top of each other above the frame — and Matter's collision solver
-    // resolves that overlap with a hard shove that can launch a letter
-    // straight into view on the very first physics step.
+    // When dropping from outside, letters need a start height above the
+    // frame. Scatter mode gives every letter a random X, so with big scale
+    // settings huge letters could otherwise land on top of each other above
+    // the frame — and Matter's collision solver resolves that overlap with
+    // a hard shove that can launch a letter straight into view on the very
+    // first physics step. So scatter stacks letters into non-overlapping
+    // vertical bands. Row layout already keeps letters horizontally
+    // separate (same as a normal "Drop again"), so it doesn't need that —
+    // stacking there just meant the last letter fell from much farther away
+    // than the first for no reason, taking noticeably longer to arrive.
     let outsideBottom = -dims.h * 0.04;
+    // However many/big the letters, never let the stack climb past this —
+    // otherwise a letter falling from that far up can build enough speed to
+    // tunnel through the floor in one physics step and vanish for good.
+    // Past this point letters start compressing (slight overlap) instead.
+    const maxOutsideReach = -dims.h * 3;
 
     for (const letter of state.letters) {
       const placement = computeLetterPlacement(letter, dims, layout);
@@ -549,95 +544,121 @@
       let { cy } = placement;
 
       if (fromOutside) {
-        const effHalfH = rotatedHalfHeight(w, h, jitterAngle);
-        const gap = dims.h * 0.015;
-        cy = outsideBottom - effHalfH;
-        outsideBottom -= effHalfH * 2 + gap;
+        if (state.scatter) {
+          const effHalfH = rotatedHalfHeight(w, h, jitterAngle);
+          const gap = dims.h * 0.015;
+          cy = Math.max(outsideBottom - effHalfH, maxOutsideReach);
+          outsideBottom = Math.max(
+            outsideBottom - (effHalfH * 2 + gap),
+            maxOutsideReach,
+          );
+        } else {
+          cy = -dims.h * 0.06;
+        }
       }
 
-      const body = makeLetterBody(cx + jitterX, cy, jitterAngle, w, h);
+      let bodyX = cx + jitterX;
+      if (state.turbulence) {
+        // Zero-G seals the frame with thick walls on all four sides, so a
+        // letter placed outside one (which big "Logo scale" layouts do)
+        // would start embedded in it and get flung out by the solver.
+        const halfW = rotatedHalfWidth(w, h, jitterAngle);
+        const halfH = rotatedHalfHeight(w, h, jitterAngle);
+        bodyX = clampRange(bodyX, halfW, dims.w - halfW);
+        cy = clampRange(cy, halfH, dims.h - halfH);
+      }
+
+      const body = makeLetterBody(bodyX, cy, jitterAngle, w, h);
+      if (state.turbulence) {
+        // Nudge each one so the drift reads as already in motion rather than
+        // waiting for the flow field to overcome a dead stop.
+        Body.setVelocity(body, {
+          x: (Math.random() - 0.5) * 4,
+          y: (Math.random() - 0.5) * 4,
+        });
+        Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.06);
+      }
       state.bodies.push(body);
     }
 
     Composite.add(engine.world, state.bodies);
   }
 
-  // ---------- One-by-one reveal ----------
-
-  const SEQUENCE_INTERVAL_MS = 350;
-  const POP_DURATION_MS = 380;
-  let sequenceTimer = null;
-
-  function stopSequence() {
-    if (sequenceTimer !== null) {
-      clearTimeout(sequenceTimer);
-      sequenceTimer = null;
-      el.btnDropSequential.textContent = "Appear one by one";
-    }
-  }
-
-  // Overshoots past 1 then settles back — reads as a "pop", not a linear grow.
-  function easeOutBack(t) {
-    const c1 = 1.70158;
-    const c3 = c1 + 1;
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  }
-
-  function spawnBodiesSequential() {
-    stopSequence();
-    for (const b of state.bodies) if (b) Composite.remove(engine.world, b);
-    // Pre-sized with holes so it always lines up with state.letters by index —
-    // tick() and friends skip the holes until each letter's turn comes up.
-    state.bodies = new Array(state.letters.length).fill(null);
-    state.appearAt = new Array(state.letters.length).fill(null);
-    if (state.letters.length === 0) return;
-
-    const dims = RATIOS[state.ratio];
-    const layout = computeLayout(dims);
-    const order =
-      state.order.length === state.letters.length
-        ? state.order
-        : state.letters.map((_, i) => i);
-
-    let step = 0;
-    const spawnNext = () => {
-      const letterIndex = order[step];
-      const letter = state.letters[letterIndex];
-      const { w, h, cx, cy, jitterAngle, jitterX } = computeLetterPlacement(
-        letter,
-        dims,
-        layout,
-      );
-
-      const body = makeLetterBody(cx + jitterX, cy, jitterAngle, w, h);
-      // Frozen and non-colliding while it scales in from nothing, so a
-      // letter popping in doesn't shove anything already settled nearby.
-      Body.setStatic(body, true);
-      body.isSensor = true;
-
-      state.bodies[letterIndex] = body;
-      state.appearAt[letterIndex] = performance.now();
-      Composite.add(engine.world, body);
-
-      step++;
-      if (step < order.length) {
-        el.btnDropSequential.textContent = `Appearing… ${step}/${order.length}`;
-        sequenceTimer = setTimeout(spawnNext, SEQUENCE_INTERVAL_MS);
-      } else {
-        sequenceTimer = null;
-        el.btnDropSequential.textContent = "Appear one by one";
-      }
-    };
-    spawnNext();
-  }
-
   function applyMaterialToBodies() {
     for (const b of state.bodies) {
-      if (!b) continue;
       b.restitution = state.bounce;
       b.friction = state.friction;
       b.frictionAir = state.air;
       Sleeping.set(b, false);
+    }
+  }
+
+  // ---------- Zero-G turbulence ----------
+
+  // Direction (radians) of the flow at a point, layered sines standing in for
+  // curl noise: cheap, tileless, and smooth in both space and time, so
+  // neighbouring letters get related — not identical — pushes and the whole
+  // field keeps churning instead of settling into a steady current.
+  function flowAngle(x, y, t, seed) {
+    const s = 0.0022 * (1.6 - state.turbulenceScale * 1.2); // bigger scale = wider swirls
+    return (
+      Math.sin(x * s + t * 0.35 + seed) * 1.6 +
+      Math.cos(y * s * 1.27 - t * 0.28) * 1.6 +
+      Math.sin((x + y) * s * 0.63 + t * 0.19) * 1.2
+    );
+  }
+
+  function applyTurbulence(timestamp) {
+    const t = timestamp * 0.001;
+    const dims = RATIOS[state.ratio];
+    // Matter applies gravity as mass * gravity.y * 0.001, so scaling the push
+    // by mass too gives every letter the same acceleration regardless of size
+    // — otherwise the big ones would barely budge while small ones shot off.
+    const accel = 0.001 * 0.55 * state.turbulenceStrength;
+
+    for (let i = 0; i < state.bodies.length; i++) {
+      const body = state.bodies[i];
+      // Bodies that drift slowly would otherwise be put to sleep by the
+      // engine and stop responding to forces entirely.
+      Sleeping.set(body, false);
+
+      const angle = flowAngle(body.position.x, body.position.y, t, i * 1.7);
+      const mag = body.mass * accel;
+      Body.applyForce(body, body.position, {
+        x: Math.cos(angle) * mag,
+        y: Math.sin(angle) * mag,
+      });
+
+      // Gentle, per-letter tumble. Scaled by inertia so big and small letters
+      // spin at comparable rates.
+      body.torque =
+        Math.sin(t * 0.6 + i * 2.3) *
+        body.inertia *
+        0.000018 *
+        state.turbulenceStrength;
+
+      // Safety net: the walls should contain everything, but a letter that
+      // gets past one (solver squeeze between two colliding letters, a
+      // mid-flight toggle) has no gravity to bring it back, so it would
+      // drift away forever. Pull grows with how far out it is and saturates,
+      // and its ceiling is well above the strongest flow push so it always
+      // wins the tug-of-war.
+      let overX = 0;
+      let overY = 0;
+      if (body.position.x < 0) overX = -body.position.x;
+      else if (body.position.x > dims.w) overX = dims.w - body.position.x;
+      if (body.position.y < 0) overY = -body.position.y;
+      else if (body.position.y > dims.h) overY = dims.h - body.position.y;
+
+      if (overX || overY) {
+        const pull = body.mass * 0.001 * 2.2;
+        const sat = (over, span) =>
+          Math.max(-1, Math.min(1, (over / span) * 6));
+        Body.applyForce(body, body.position, {
+          x: sat(overX, dims.w) * pull,
+          y: sat(overY, dims.h) * pull,
+        });
+      }
     }
   }
 
@@ -675,7 +696,12 @@
     const delta = Math.min(1000 / 30, timestamp - lastTime);
     lastTime = timestamp;
 
-    engine.gravity.y = state.gravity;
+    if (state.turbulence) {
+      engine.gravity.y = 0;
+      applyTurbulence(timestamp);
+    } else {
+      engine.gravity.y = state.gravity;
+    }
     Engine.update(engine, delta);
 
     const dims = RATIOS[state.ratio];
@@ -685,35 +711,14 @@
     const { logoW } = computeLayout(dims);
     for (let i = 0; i < state.bodies.length; i++) {
       const body = state.bodies[i];
-      if (!body) continue; // letter hasn't appeared yet (one-by-one reveal)
       const letter = state.letters[i];
       const w = Math.max(6, letter.relW * logoW);
       const h = Math.max(6, letter.relH * logoW);
 
-      let scale = 1;
-      const appearStart = state.appearAt[i];
-      if (appearStart != null) {
-        const t = Math.min(1, (timestamp - appearStart) / POP_DURATION_MS);
-        scale = Math.max(0, easeOutBack(t));
-        if (t >= 1) {
-          // Pop finished: hand the letter back to physics so gravity and
-          // collisions resume as normal.
-          state.appearAt[i] = null;
-          Body.setStatic(body, false);
-          body.isSensor = false;
-        }
-      }
-
       ctx.save();
       ctx.translate(body.position.x, body.position.y);
       ctx.rotate(body.angle);
-      ctx.drawImage(
-        letterDrawable(i),
-        (-w * scale) / 2,
-        (-h * scale) / 2,
-        w * scale,
-        h * scale,
-      );
+      ctx.drawImage(letterDrawable(i), -w / 2, -h / 2, w, h);
       ctx.restore();
     }
 
@@ -774,7 +779,6 @@
 
   el.btnDrop.addEventListener("click", () => spawnBodies());
   el.btnDropOutside.addEventListener("click", () => spawnBodies({ fromOutside: true }));
-  el.btnDropSequential.addEventListener("click", () => spawnBodiesSequential());
 
   // ---------- Video export ----------
 
@@ -874,7 +878,7 @@
   el.ctrlGravity.addEventListener("input", () => {
     state.gravity = parseFloat(el.ctrlGravity.value);
     el.valGravity.textContent = state.gravity.toFixed(2);
-    for (const b of state.bodies) if (b) Sleeping.set(b, false);
+    for (const b of state.bodies) Sleeping.set(b, false);
   });
 
   el.ctrlBounce.addEventListener("input", () => {
@@ -909,6 +913,27 @@
   el.ctrlScatter.addEventListener("change", () => {
     state.scatter = el.ctrlScatter.checked;
     if (state.letters.length) spawnBodies();
+  });
+
+  el.ctrlTurbulence.addEventListener("change", () => {
+    state.turbulence = el.ctrlTurbulence.checked;
+    el.turbulenceField.hidden = !state.turbulence;
+    el.turbulenceScaleField.hidden = !state.turbulence;
+    // The ceiling only exists in zero-G, and letters left mid-air from a
+    // previous drop need re-placing inside the now-closed box.
+    rebuildWalls();
+    if (state.letters.length) spawnBodies();
+  });
+
+  el.ctrlTurbulenceStrength.addEventListener("input", () => {
+    state.turbulenceStrength =
+      parseInt(el.ctrlTurbulenceStrength.value, 10) / 100;
+    el.valTurbulence.textContent = `${el.ctrlTurbulenceStrength.value}%`;
+  });
+
+  el.ctrlTurbulenceScale.addEventListener("input", () => {
+    state.turbulenceScale = parseInt(el.ctrlTurbulenceScale.value, 10) / 100;
+    el.valTurbulenceScale.textContent = `${el.ctrlTurbulenceScale.value}%`;
   });
 
   el.letterColorModeGroup.addEventListener("click", (e) => {

@@ -65,14 +65,6 @@
           </p>
         </section>
 
-        <section class="panel-group" id="order-section" hidden>
-          <h3>Order</h3>
-          <div class="order-list" id="order-list"></div>
-          <p class="hint" style="margin-top: 8px;">
-            Sets the sequence used by "Appear one by one".
-          </p>
-        </section>
-
         <section class="panel-group">
           <h3>Physics</h3>
 
@@ -118,7 +110,37 @@
 
           <button id="btn-drop" class="btn btn-primary" style="width: 100%;" disabled>Drop again</button>
           <button id="btn-drop-outside" class="btn btn-ghost" style="width: 100%; margin-top: 8px;" disabled>Drop from outside</button>
-          <button id="btn-drop-sequential" class="btn btn-ghost" style="width: 100%; margin-top: 8px;" disabled>Appear one by one</button>
+        </section>
+
+        <section class="panel-group">
+          <h3>Motion</h3>
+          <div class="field-inline">
+            <span>Zero-G turbulence</span>
+            <label class="switch">
+              <input type="checkbox" id="ctrl-turbulence" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="hint" style="margin-top: 8px;">
+            Turns gravity off and pushes the letters through a swirling flow field so they drift
+            and tumble around the frame continuously. The Gravity slider is ignored while this is on.
+          </p>
+
+          <label class="field" id="turbulence-field" style="margin-top: 14px;" hidden>
+            <div class="field-label">
+              <span>Turbulence</span>
+              <span class="field-value" id="val-turbulence">50%</span>
+            </div>
+            <input type="range" id="ctrl-turbulence-strength" min="0" max="100" step="1" value="50" />
+          </label>
+
+          <label class="field" id="turbulence-scale-field" hidden>
+            <div class="field-label">
+              <span>Swirl size</span>
+              <span class="field-value" id="val-turbulence-scale">50%</span>
+            </div>
+            <input type="range" id="ctrl-turbulence-scale" min="0" max="100" step="1" value="50" />
+          </label>
         </section>
 
         <section class="panel-group">
